@@ -1,0 +1,48 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: notchling-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Release (macOS 26)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build, sign, and package
+        run: bash scripts/ci-build.sh
+
+      - name: Upload DMG and ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: Notchling-${{ github.run_number }}
+          path: |
+            dist/Notchling.dmg
+            dist/Notchling.zip
+          if-no-files-found: error
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" \
+            dist/Notchling.dmg \
+            dist/Notchling.zip \
+            --title "Notchling ${GITHUB_REF_NAME}" \
+            --notes "Ad-hoc signierter Release-Build (arm64, macOS 26). DMG öffnen, Notchling.app nach /Applications ziehen, dann Rechtsklick > Öffnen. Alternativ: xattr -dr com.apple.quarantine /Applications/Notchling.app. Einschränkungen stehen in der README."
