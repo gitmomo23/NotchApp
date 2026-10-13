@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>LSUIElement</key>
+	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Notchling zeigt eine lokale Vorschau der eingebauten Kamera im Notch-Panel. Das Bild bleibt auf diesem Mac und wird nicht gespeichert oder weitergegeben.</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Notchling liest anstehende Termine, um sie in der Notch anzuzeigen. Die Daten bleiben auf diesem Mac.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Notchling liest anstehende Termine, um sie in der Notch anzuzeigen. Die Daten bleiben auf diesem Mac.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Notchling steuert Musik und Spotify, um Titel und Wiedergabe anzuzeigen, wenn die System-Wiedergabe keine Daten liefert.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>
