@@ -52,6 +52,10 @@ enum VolumeControl {
         return status == noErr ? device : 0
     }
 
+    /// FourCC `vmvc`. The Swift CoreAudio overlay does not export
+    /// `kAudioHardwareServiceDeviceProperty_VirtualMainVolume`.
+    private static let virtualMainVolume = AudioObjectPropertySelector(0x766D_7663)
+
     private static func volumeAddress(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
         AudioObjectPropertyAddress(
             mSelector: selector,
@@ -61,7 +65,7 @@ enum VolumeControl {
     }
 
     private static func readVolume(_ device: AudioDeviceID) -> Float? {
-        var address = volumeAddress(kAudioHardwareServiceDeviceProperty_VirtualMainVolume)
+        var address = volumeAddress(Self.virtualMainVolume)
         if !AudioObjectHasProperty(device, &address) {
             address = volumeAddress(kAudioDevicePropertyVolumeScalar)
             if !AudioObjectHasProperty(device, &address) { return nil }
@@ -73,7 +77,7 @@ enum VolumeControl {
     }
 
     private static func writeVolume(_ device: AudioDeviceID, value: Float) -> Bool {
-        var address = volumeAddress(kAudioHardwareServiceDeviceProperty_VirtualMainVolume)
+        var address = volumeAddress(Self.virtualMainVolume)
         if !AudioObjectHasProperty(device, &address) {
             address = volumeAddress(kAudioDevicePropertyVolumeScalar)
         }

@@ -18,8 +18,8 @@ enum ScreenGeometry {
     }
 
     static func metrics(for screen: NSScreen) -> ScreenPlacement {
-        let left = normalized(screen.auxiliaryTopLeftArea, on: screen)
-        let right = normalized(screen.auxiliaryTopRightArea, on: screen)
+        let left = normalized(screen.auxiliaryTopLeftArea ?? .zero, on: screen)
+        let right = normalized(screen.auxiliaryTopRightArea ?? .zero, on: screen)
         let width = right.minX - left.maxX
         let height = max(left.height, max(right.height, screen.safeAreaInsets.top))
         if width > 80, width < 420, height > 12 {
@@ -44,8 +44,8 @@ enum ScreenGeometry {
             frame=\(nsString(from: screen.frame))
             visible=\(nsString(from: screen.visibleFrame))
             safeTop=\(screen.safeAreaInsets.top)
-            auxiliaryLeft=\(nsString(from: screen.auxiliaryTopLeftArea))
-            auxiliaryRight=\(nsString(from: screen.auxiliaryTopRightArea))
+            auxiliaryLeft=\(nsString(from: screen.auxiliaryTopLeftArea ?? .zero))
+            auxiliaryRight=\(nsString(from: screen.auxiliaryTopRightArea ?? .zero))
             notch=\(nsString(from: placement.notchRect)) hardware=\(placement.isHardwareNotch)
             """
         }.joined(separator: "\n\n")

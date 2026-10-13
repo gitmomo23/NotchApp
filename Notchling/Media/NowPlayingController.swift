@@ -92,7 +92,7 @@ final class NowPlayingController: ObservableObject {
     }
 
     private func send(_ command: NLMediaCommand) {
-        if NLMediaBridge.isAvailable(), NLMediaBridge.sendCommand(command) {
+        if NLMediaBridge.isAvailable(), NLMediaBridge.send(command) {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [weak self] in
                 self?.refresh()
             }

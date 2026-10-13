@@ -183,7 +183,8 @@ final class HUDController: ObservableObject {
 
     private func installTapIfTrusted() {
         guard eventTap == nil, trusted(prompt: false) else { return }
-        let mask = CGEventMask(1 << CGEventType.systemDefined.rawValue)
+        // NX_SYSDEFINED. The Swift overlay no longer exposes CGEventType.systemDefined.
+        let mask = CGEventMask(1 << 14)
         guard let tap = CGEvent.tapCreate(
             tap: .cgSessionEventTap,
             place: .headInsertEventTap,
@@ -362,7 +363,8 @@ final class HUDController: ObservableObject {
 
     private func trusted(prompt: Bool) -> Bool {
         if !prompt { return AXIsProcessTrusted() }
-        let options = [kAXTrustedCheckOptionPrompt as String: true] as CFDictionary
+        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+        let options = [promptKey: true] as CFDictionary
         return AXIsProcessTrustedWithOptions(options)
     }
 

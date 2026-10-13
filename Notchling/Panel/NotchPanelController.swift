@@ -250,7 +250,8 @@ final class NotchPanelController {
 
     private func airDrop(_ urls: [URL]) {
         guard !urls.isEmpty else { return }
-        if let service = NSSharingService(named: .airDrop), service.canPerform(withItems: urls) {
+        let airDrop = NSSharingService.Name(rawValue: "com.apple.share.AirDrop.send")
+        if let service = NSSharingService(named: airDrop), service.canPerform(withItems: urls) {
             service.perform(withItems: urls)
             return
         }

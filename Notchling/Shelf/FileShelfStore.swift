@@ -39,7 +39,7 @@ final class FileShelfStore: ObservableObject {
             if provider.canLoadObject(ofClass: URL.self) {
                 accepted = true
                 _ = provider.loadObject(ofClass: URL.self) { [weak self] object, _ in
-                    guard let url = object as? URL else { return }
+                    guard let url = object else { return }
                     DispatchQueue.main.async {
                         self?.add(url: url)
                     }
