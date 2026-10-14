@@ -42,6 +42,7 @@ struct NotchRootView: View {
                 .allowsHitTesting(panel.expansion > 0.55)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(LayoutProbe(expansion: panel.expansion))
     }
 
     private var collapsedLayer: some View {
@@ -471,4 +472,32 @@ private func sectionTitle(_ text: String) -> some View {
     Text(text.uppercased())
         .font(.system(size: 10, weight: .semibold))
         .foregroundStyle(.white.opacity(0.4))
+}
+
+private struct LayoutProbe: View {
+    var expansion: CGFloat
+    @State private var last = CGSize(width: -1, height: -1)
+
+    var body: some View {
+        GeometryReader { proxy in
+            Color.clear
+                .onAppear { note(proxy.size, event: "appear") }
+                .onChange(of: proxy.size) { _, size in
+                    note(size, event: "change")
+                }
+        }
+    }
+
+    private func note(_ size: CGSize, event: String) {
+        let jump = abs(size.width - last.width) >= 24 || abs(size.height - last.height) >= 16
+        guard last.width < 0 || jump else { return }
+        last = size
+        let empty = size.width < 2 || size.height < 2
+        AppLog.panel.notice(
+            "SwiftUI \(event, privacy: .public) size=\(String(format: "%.1fx%.1f", size.width, size.height), privacy: .public) expansion=\(String(format: "%.3f", expansion), privacy: .public) empty=\(empty, privacy: .public)"
+        )
+        if empty && expansion > 0.5 {
+            AppLog.panel.error("SwiftUI content size is empty while the panel is expanded")
+        }
+    }
 }

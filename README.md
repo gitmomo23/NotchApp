@@ -31,7 +31,7 @@ Dieselbe App steckt auch in `Notchling.zip`, falls du kein DMG verwenden willst.
 
 ## Bedienung
 
-Das Menüleisten-Symbol ist immer da. Sein Menü beginnt mit **Panel öffnen**. Hover über die Pille unter der Notch klappt das Panel auf, solange „Beim Darüberfahren öffnen“ aktiv ist. Ein Klick auf die geschlossene Pille pinnt es auf. Die Stecknadel hält es offen, der Pfeil nach oben schließt es. Escape schließt es, wenn das Panel Tastaturfokus hat. Beim Start klappt das Panel einmal kurz auf, damit sichtbar ist, dass es läuft.
+Das Menüleisten-Symbol ist immer da. Sein Menü beginnt mit **Panel öffnen**. Hover über die Pille unter der Notch klappt das Panel auf, solange „Beim Darüberfahren öffnen“ aktiv ist. Es bleibt offen, solange der Zeiger im aufgeklappten Bereich ist, und schließt erst etwa 0,4 Sekunden nachdem der Zeiger diesen Bereich wirklich verlassen hat. Ein Klick auf die Pille pinnt das Panel, bis außerhalb geklickt wird. Die Stecknadel hält es offen, der Pfeil nach oben schließt es. Escape schließt es, wenn das Panel Tastaturfokus hat. Beim Start klappt das Panel einmal kurz auf, damit sichtbar ist, dass es läuft.
 
 In den Einstellungen schaltest du einzelne Funktionen und den Start beim Anmelden.
 
