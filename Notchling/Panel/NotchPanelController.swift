@@ -14,63 +14,44 @@ final class NotchPanel: NSPanel {
 }
 
 final class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
-    var onMouseEntered: (() -> Void)?
-    var onMouseExited: (() -> Void)?
-    var onCollapsedClick: (() -> Void)?
-    private var tracking: NSTrackingArea?
+    var onClick: ((String) -> Void)?
 
     override var isOpaque: Bool { false }
 
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking {
-            removeTrackingArea(tracking)
-        }
-        let area = NSTrackingArea(
-            rect: bounds,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self,
-            userInfo: nil
-        )
-        addTrackingArea(area)
-        tracking = area
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        onMouseEntered?()
-        super.mouseEntered(with: event)
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        onMouseExited?()
-        super.mouseExited(with: event)
-    }
-
     override func mouseDown(with event: NSEvent) {
         window?.makeKey()
-        onCollapsedClick?()
+        onClick?("view")
         super.mouseDown(with: event)
     }
 }
 
 final class NotchPanelController {
+    private struct PanelFrames {
+        var collapsed: NSRect
+        var expanded: NSRect
+        var obscuredTop: CGFloat
+        var chin: CGFloat
+        var hardware: Bool
+    }
+
     private let model: AppModel
     private let panel: NotchPanel
     private var spring = SpringValue()
     private var springTimer: Timer?
     private var hoverTimer: Timer?
-    private var collapseWork: DispatchWorkItem?
     private var peekWork: DispatchWorkItem?
     private var keyMonitor: Any?
-    private var localMouseMonitor: Any?
-    private var globalMouseMonitor: Any?
+    private var clickMonitor: Any?
     private var pointerInside = false
+    private var outsideSince: TimeInterval?
     private var expandedAbove = false
     private var lastTick = CACurrentMediaTime()
-    private var lastLoggedFrame = ""
     private var lastLoggedSize = NSSize.zero
+    private var lastClickAt: TimeInterval = 0
+    private let exitMargin: CGFloat = 12
+    private let closeDelay: TimeInterval = 0.4
 
     init(model: AppModel) {
         self.model = model
@@ -94,7 +75,6 @@ final class NotchPanelController {
         panel.animationBehavior = .none
         panel.isReleasedWhenClosed = false
         panel.ignoresMouseEvents = false
-        panel.acceptsMouseMovedEvents = true
         let root = NotchRootView(
             panel: model.panel,
             settings: model.settings,
@@ -111,12 +91,9 @@ final class NotchPanelController {
         host.wantsLayer = true
         host.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = host
-        host.frame = panel.contentRect(forFrameRect: panel.frame)
         self.panel = panel
-        host.onMouseEntered = { [weak self] in self?.pointerEntered(source: "tracking") }
-        host.onMouseExited = { [weak self] in self?.pointerExited(source: "tracking") }
-        host.onCollapsedClick = { [weak self] in self?.clickCollapsed() }
-        host.updateTrackingAreas()
+        host.onClick = { [weak self] source in self?.handleClick(source: source) }
+        placeHostingView(reason: "init")
         wireActions()
         AppLog.panel.notice(
             "panel created level=\(panel.level.rawValue, privacy: .public) frame=\(Self.rectString(panel.frame), privacy: .public)"
@@ -128,7 +105,7 @@ final class NotchPanelController {
         ScreenGeometry.logScreens()
         applyFrame(reason: "start")
         reveal()
-        let timer = Timer(timeInterval: 0.08, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 0.05, repeats: true) { [weak self] _ in
             self?.evaluateHover()
         }
         RunLoop.main.add(timer, forMode: .common)
@@ -138,17 +115,13 @@ final class NotchPanelController {
             self?.close()
             return nil
         }
-        localMouseMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] event in
-            self?.evaluateHover()
-            return event
-        }
-        globalMouseMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged]) { [weak self] _ in
+        clickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.evaluateHover()
+                self?.handleClick(source: "global")
             }
         }
         AppLog.panel.notice(
-            "hover monitors local=\(self.localMouseMonitor != nil, privacy: .public) global=\(self.globalMouseMonitor != nil, privacy: .public) ignoresMouse=\(self.panel.ignoresMouseEvents, privacy: .public)"
+            "hover source=position-timer clickMonitor=\(self.clickMonitor != nil, privacy: .public) ignoresMouse=\(self.panel.ignoresMouseEvents, privacy: .public)"
         )
         NotificationCenter.default.addObserver(
             forName: NSApplication.didChangeScreenParametersNotification,
@@ -176,7 +149,7 @@ final class NotchPanelController {
             model.panel.pinned = true
             peekWork?.cancel()
         }
-        collapseWork?.cancel()
+        outsideSince = nil
         spring.target = 1
         reveal()
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
@@ -198,8 +171,10 @@ final class NotchPanelController {
     }
 
     private func close() {
-        AppLog.panel.notice("close")
+        AppLog.panel.notice("close pinned=\(self.model.panel.pinned, privacy: .public)")
         model.panel.pinned = false
+        pointerInside = false
+        outsideSince = nil
         spring.target = 0
         if NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
             spring.snap()
@@ -224,8 +199,9 @@ final class NotchPanelController {
         open(pin: false)
         let work = DispatchWorkItem { [weak self] in
             guard let self else { return }
+            let mouse = NSEvent.mouseLocation
             if self.model.panel.pinned || self.pointerInside { return }
-            if self.panel.frame.contains(NSEvent.mouseLocation) { return }
+            if Self.containsClosed(mouse, self.stayRect()) { return }
             AppLog.panel.notice("launch peek end")
             self.close()
         }
@@ -233,38 +209,43 @@ final class NotchPanelController {
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: work)
     }
 
-    private func clickCollapsed() {
-        guard spring.value < 0.45 else { return }
-        AppLog.panel.notice("collapsed click")
-        open(pin: true)
-    }
-
-    private func reveal() {
-        panel.ignoresMouseEvents = false
-        panel.alphaValue = 1
-        panel.level = Self.notchLevel()
-        panel.orderFrontRegardless()
-    }
-
+    /// One timer. Screen coordinates. The open panel's hit rect is the fully expanded
+    /// frame plus a margin, so the spring and the screen's top edge cannot flap the state.
     private func evaluateHover() {
         let mouse = NSEvent.mouseLocation
-        let inside = panel.frame.contains(mouse)
-        if inside && !pointerInside {
-            pointerInside = true
-            pointerEntered(source: "location")
-        } else if !inside && pointerInside {
+        let staying = Self.containsClosed(mouse, stayRect())
+        if pointerInside {
+            if staying || model.panel.pinned {
+                outsideSince = nil
+                return
+            }
+            let now = CACurrentMediaTime()
+            if outsideSince == nil {
+                outsideSince = now
+                AppLog.panel.notice(
+                    "hover outside mouse=\(Self.pointString(mouse), privacy: .public) stay=\(Self.rectString(self.stayRect()), privacy: .public) window=\(Self.rectString(self.panel.frame), privacy: .public)"
+                )
+                return
+            }
+            if now - (outsideSince ?? now) < closeDelay { return }
             pointerInside = false
-            pointerExited(source: "location")
+            outsideSince = nil
+            AppLog.panel.notice(
+                "hover exit mouse=\(Self.pointString(mouse), privacy: .public) stay=\(Self.rectString(self.stayRect()), privacy: .public) window=\(Self.rectString(self.panel.frame), privacy: .public)"
+            )
+            close()
+            return
         }
-    }
 
-    private func pointerEntered(source: String) {
+        let openish = spring.target > 0.5 || spring.value > 0.35
+        let arm = openish ? stayRect() : armRect()
+        guard Self.containsClosed(mouse, arm) else { return }
         pointerInside = true
-        AppLog.panel.notice(
-            "hover enter source=\(source, privacy: .public) mouse=\(Self.pointString(NSEvent.mouseLocation), privacy: .public) frame=\(Self.rectString(self.panel.frame), privacy: .public)"
-        )
-        collapseWork?.cancel()
+        outsideSince = nil
         peekWork?.cancel()
+        AppLog.panel.notice(
+            "hover enter mouse=\(Self.pointString(mouse), privacy: .public) arm=\(Self.rectString(arm), privacy: .public) window=\(Self.rectString(self.panel.frame), privacy: .public)"
+        )
         guard model.settings.hoverOpens || model.panel.pinned else {
             AppLog.panel.notice("hover ignored because hover-open is off")
             return
@@ -274,19 +255,52 @@ final class NotchPanelController {
         }
     }
 
-    private func pointerExited(source: String) {
-        pointerInside = false
-        AppLog.panel.notice("hover exit source=\(source, privacy: .public)")
-        guard !model.panel.pinned else { return }
-        collapseWork?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            guard let self else { return }
-            if self.panel.frame.contains(NSEvent.mouseLocation) { return }
-            if self.model.panel.pinned { return }
-            self.close()
+    private func handleClick(source: String) {
+        let now = CACurrentMediaTime()
+        if now - lastClickAt < 0.08 { return }
+        lastClickAt = now
+        let mouse = NSEvent.mouseLocation
+        let onPill = Self.containsClosed(mouse, armRect())
+        let panelOpen = spring.value > 0.25 || spring.target > 0.5 || model.panel.pinned
+        let onOpen = panelOpen && Self.containsClosed(mouse, stayRect())
+        AppLog.panel.notice(
+            "click source=\(source, privacy: .public) mouse=\(Self.pointString(mouse), privacy: .public) onPill=\(onPill, privacy: .public) onOpen=\(onOpen, privacy: .public) pinned=\(self.model.panel.pinned, privacy: .public) expansion=\(String(format: "%.3f", self.spring.value), privacy: .public) window=\(Self.rectString(self.panel.frame), privacy: .public)"
+        )
+        if onPill && spring.value < 0.45 {
+            pointerInside = true
+            outsideSince = nil
+            open(pin: true)
+            return
         }
-        collapseWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: work)
+        guard panelOpen, !onOpen else { return }
+        AppLog.panel.notice("click outside, unpin")
+        close()
+    }
+
+    private func reveal() {
+        panel.ignoresMouseEvents = false
+        panel.alphaValue = 1
+        panel.level = Self.notchLevel()
+        panel.orderFrontRegardless()
+    }
+
+    private func armRect() -> NSRect {
+        padded(currentFrames()?.collapsed ?? panel.frame, 6)
+    }
+
+    private func stayRect() -> NSRect {
+        padded(currentFrames()?.expanded ?? panel.frame, exitMargin)
+    }
+
+    private func padded(_ rect: NSRect, _ margin: CGFloat) -> NSRect {
+        rect.insetBy(dx: -margin, dy: -margin)
+    }
+
+    /// Closed on every edge. `CGRect.contains` excludes maxX/maxY, so a cursor on the
+    /// menu-bar edge (y == screen height) was counted as outside the open panel.
+    private static func containsClosed(_ point: NSPoint, _ rect: NSRect) -> Bool {
+        guard rect.width > 0, rect.height > 0 else { return false }
+        return point.x >= rect.minX && point.x <= rect.maxX && point.y >= rect.minY && point.y <= rect.maxY
     }
 
     private func startSpring() {
@@ -312,52 +326,32 @@ final class NotchPanelController {
             AppLog.panel.notice(
                 "spring settled value=\(String(format: "%.3f", self.spring.value), privacy: .public) frame=\(Self.rectString(self.panel.frame), privacy: .public) visible=\(self.panel.isVisible, privacy: .public)"
             )
+            placeHostingView(reason: "settled")
         }
     }
 
     private func applyFrame(reason: String) {
-        guard let placement = ScreenGeometry.placement() else {
+        guard let frames = currentFrames() else {
             AppLog.panel.error("applyFrame skipped, no screen reason=\(reason, privacy: .public)")
             return
         }
-        let mirrorVisible = model.settings.mirrorEnabled && model.mirror.wantsPreview
-        let expanded = PanelLayout.expandedSize(
-            notchHeight: placement.obscuredTop,
-            settings: model.settings,
-            mirrorVisible: mirrorVisible
-        )
-        let collapsed = placement.collapsedFrame
         let t = min(1, max(0, spring.value))
-        let expandedWidth = max(expanded.width, collapsed.width)
-        let expandedHeight = max(expanded.height, collapsed.height)
-        var width = collapsed.width + (expandedWidth - collapsed.width) * t
-        let height = collapsed.height + (expandedHeight - collapsed.height) * t
-        let maxWidth = max(collapsed.width, placement.screen.frame.width - 16)
-        width = min(width, maxWidth)
-        var x = collapsed.midX - (width / 2)
-        let minX = placement.screen.frame.minX + 8
-        let maxX = placement.screen.frame.maxX - width - 8
-        if maxX >= minX {
-            x = min(max(x, minX), maxX)
-        }
-        let y = placement.screen.frame.maxY - height
-        let requested = NSRect(x: x, y: y, width: max(width, 1), height: max(height, 1))
+        var width = frames.collapsed.width + (frames.expanded.width - frames.collapsed.width) * t
+        let height = frames.collapsed.height + (frames.expanded.height - frames.collapsed.height) * t
+        width = min(width, frames.expanded.width)
+        let requested = interpolated(frames: frames, width: width, height: height)
         panel.ignoresMouseEvents = false
         panel.setFrame(requested, display: true)
-        if let host = panel.contentView {
-            host.frame = panel.contentRect(forFrameRect: panel.frame)
-            host.layoutSubtreeIfNeeded()
-        }
+        placeHostingView(reason: reason)
         model.panel.expansion = t
-        model.panel.notchHeight = placement.obscuredTop
-        model.panel.chin = placement.chin
-        model.panel.hasNotch = placement.isHardwareNotch
+        model.panel.notchHeight = frames.obscuredTop
+        model.panel.chin = frames.chin
+        model.panel.hasNotch = frames.hardware
         let actual = Self.rectString(panel.frame)
         let wanted = Self.rectString(requested)
         let sizeJump = abs(panel.frame.width - lastLoggedSize.width) >= 20
             || abs(panel.frame.height - lastLoggedSize.height) >= 12
         if reason != "spring" || sizeJump {
-            lastLoggedFrame = actual
             lastLoggedSize = panel.frame.size
             AppLog.panel.notice(
                 "frame reason=\(reason, privacy: .public) t=\(String(format: "%.3f", t), privacy: .public) requested=\(wanted, privacy: .public) actual=\(actual, privacy: .public) visible=\(self.panel.isVisible, privacy: .public) level=\(self.panel.level.rawValue, privacy: .public) mouse=\(Self.pointString(NSEvent.mouseLocation), privacy: .public)"
@@ -368,6 +362,80 @@ final class NotchPanelController {
                 )
             }
         }
+    }
+
+    private func placeHostingView(reason: String) {
+        guard let host = panel.contentView else {
+            AppLog.panel.error("SwiftUI host missing")
+            return
+        }
+        let local = NSRect(origin: .zero, size: panel.frame.size)
+        if host.frame != local {
+            host.frame = local
+        }
+        host.layoutSubtreeIfNeeded()
+        let origin = host.frame.origin
+        let bounds = host.bounds.size
+        let misplaced = abs(origin.x) > 0.5 || abs(origin.y) > 0.5
+        let empty = bounds.width < 2 || bounds.height < 2
+        let shouldLog = reason != "spring"
+        guard shouldLog else { return }
+        AppLog.panel.notice(
+            "SwiftUI host reason=\(reason, privacy: .public) local=\(Self.rectString(host.frame), privacy: .public) bounds=\(String(format: "%.1fx%.1f", bounds.width, bounds.height), privacy: .public) hidden=\(host.isHidden, privacy: .public) alpha=\(String(format: "%.2f", self.panel.alphaValue), privacy: .public) expansion=\(String(format: "%.3f", self.spring.value), privacy: .public)"
+        )
+        if misplaced {
+            AppLog.panel.error(
+                "SwiftUI host origin is not in window coordinates local=\(Self.rectString(host.frame), privacy: .public)"
+            )
+        }
+        if empty {
+            AppLog.panel.error("SwiftUI host bounds are empty")
+        }
+    }
+
+    private func currentFrames() -> PanelFrames? {
+        guard let placement = ScreenGeometry.placement() else { return nil }
+        let mirrorVisible = model.settings.mirrorEnabled && model.mirror.wantsPreview
+        let expandedSize = PanelLayout.expandedSize(
+            notchHeight: placement.obscuredTop,
+            settings: model.settings,
+            mirrorVisible: mirrorVisible
+        )
+        let collapsed = placement.collapsedFrame
+        let width = min(max(expandedSize.width, collapsed.width), max(collapsed.width, placement.screen.frame.width - 16))
+        let height = max(expandedSize.height, collapsed.height)
+        let expanded = interpolated(
+            frames: PanelFrames(
+                collapsed: collapsed,
+                expanded: collapsed,
+                obscuredTop: placement.obscuredTop,
+                chin: placement.chin,
+                hardware: placement.isHardwareNotch
+            ),
+            width: width,
+            height: height
+        )
+        return PanelFrames(
+            collapsed: collapsed,
+            expanded: expanded,
+            obscuredTop: placement.obscuredTop,
+            chin: placement.chin,
+            hardware: placement.isHardwareNotch
+        )
+    }
+
+    private func interpolated(frames: PanelFrames, width: CGFloat, height: CGFloat) -> NSRect {
+        var x = frames.collapsed.midX - (width / 2)
+        guard let screen = ScreenGeometry.placement()?.screen else {
+            return NSRect(x: x, y: frames.collapsed.maxY - height, width: max(width, 1), height: max(height, 1))
+        }
+        let minX = screen.frame.minX + 8
+        let maxX = screen.frame.maxX - width - 8
+        if maxX >= minX {
+            x = min(max(x, minX), maxX)
+        }
+        let y = screen.frame.maxY - height
+        return NSRect(x: x, y: y, width: max(width, 1), height: max(height, 1))
     }
 
     private func updateExpansionSideEffects() {
