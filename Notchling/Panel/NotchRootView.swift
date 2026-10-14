@@ -30,7 +30,7 @@ struct NotchRootView: View {
                 .stroke(Color.white.opacity(0.08), lineWidth: 1)
 
             collapsedLayer
-                .frame(height: panel.notchHeight)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .opacity(collapsedOpacity)
                 .allowsHitTesting(panel.expansion < 0.4)
 
@@ -45,28 +45,42 @@ struct NotchRootView: View {
     }
 
     private var collapsedLayer: some View {
-        Button(action: actions.openPinned) {
-            HStack(spacing: 6) {
-                if settings.nowPlayingEnabled, nowPlaying.snapshot?.isPlaying == true {
-                    Circle().fill(Color(red: 0.55, green: 0.82, blue: 1)).frame(width: 5, height: 5)
+        VStack(spacing: 0) {
+            Spacer(minLength: 0)
+            Button(action: actions.openPinned) {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(red: 0.45, green: 0.78, blue: 1))
+                        .frame(width: 6, height: 6)
+                    Text(collapsedTitle)
+                        .font(.system(size: 11, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    if settings.batteryEnabled, battery.snapshot.available {
+                        Text("\(battery.snapshot.percent)%")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.72))
+                    }
                 }
-                Text(collapsedTitle)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-                if settings.batteryEnabled, battery.snapshot.available {
-                    Text("\(battery.snapshot.percent)%")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.62))
-                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity)
+                .frame(height: max(20, panel.chin - 4))
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color(red: 0.14, green: 0.14, blue: 0.16))
+                )
+                .overlay(
+                    Capsule(style: .continuous)
+                        .stroke(Color.white.opacity(0.5), lineWidth: 1)
+                )
+                .contentShape(Capsule())
             }
-            .foregroundStyle(.white.opacity(0.92))
-            .padding(.horizontal, 12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .padding(.horizontal, 8)
+            .padding(.bottom, 2)
+            .accessibilityLabel("Panel öffnen")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Notchling öffnen")
     }
 
     private var collapsedTitle: String {

@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import CoreGraphics
 import Foundation
@@ -26,5 +27,6 @@ final class PanelState: ObservableObject {
     @Published var expansion: CGFloat = 0
     @Published var pinned = false
     @Published var notchHeight: CGFloat = 32
+    @Published var chin: CGFloat = ScreenGeometry.chin
     @Published var hasNotch = false
 }
