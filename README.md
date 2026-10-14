@@ -31,13 +31,13 @@ Dieselbe App steckt auch in `Notchling.zip`, falls du kein DMG verwenden willst.
 
 ## Bedienung
 
-Das Menüleisten-Symbol öffnet das Panel, die Einstellungen und beendet die App. Hover über die Notch klappt das Panel auf, solange „Beim Darüberfahren öffnen“ aktiv ist. Ein Klick auf die geschlossene Notch pinnt es auf. Die Stecknadel hält es offen, der Pfeil nach oben schließt es. Escape schließt es, wenn das Panel Tastaturfokus hat.
+Das Menüleisten-Symbol ist immer da. Sein Menü beginnt mit **Panel öffnen**. Hover über die Pille unter der Notch klappt das Panel auf, solange „Beim Darüberfahren öffnen“ aktiv ist. Ein Klick auf die geschlossene Pille pinnt es auf. Die Stecknadel hält es offen, der Pfeil nach oben schließt es. Escape schließt es, wenn das Panel Tastaturfokus hat. Beim Start klappt das Panel einmal kurz auf, damit sichtbar ist, dass es läuft.
 
 In den Einstellungen schaltest du einzelne Funktionen und den Start beim Anmelden.
 
 ## Funktionen
 
-- **Notch-Panel.** Randloses `NSPanel` über der Notch, Feder-Animation, Hover und Klick.
+- **Notch-Panel.** Randloses `NSPanel` über der Menüleiste, Feder-Animation, Hover und Klick. Zugeklappt bleibt eine kleine Pille unter der Notch sichtbar.
 - **Wiedergabe.** Cover, Titel, Play/Pause, Titelwechsel und Fortschritt. Zuerst die Systemwiedergabe (MediaRemote, zur Laufzeit geladen). Wenn die nichts liefert, AppleScript für Musik (`com.apple.Music`) und Spotify (`com.spotify.client`).
 - **Kalender.** Die nächsten Termine über EventKit, mit explizitem Zugriffsdialog.
 - **Dateiablage.** Dateien per Drag-and-drop ablegen, persistent als Lesezeichen, wieder herausziehen, per AirDrop oder dem Teilen-Dialog (`NSSharingService`) verschicken. Rechtsklick auf ein Symbol.
@@ -45,7 +45,7 @@ In den Einstellungen schaltest du einzelne Funktionen und den Start beim Anmelde
 - **HUD.** Ersetzt Lautstärke- und, soweit der Mac sie freigibt, Helligkeitstasten. Abschaltbar. Standard ist aus.
 - **Spiegel.** Lokale Kameravorschau über AVFoundation, gespiegelt, nur solange das Panel offen und der Spiegel eingeschaltet ist.
 - **Einstellungen.** Feature-Schalter und Start beim Anmelden über `SMAppService`.
-- **Menüleiste.** `LSUIElement`, kein Dock-Symbol. Usage-Strings für Kamera, Kalender und Apple Events stehen in `Notchling/Info.plist`.
+- **Menüleiste.** `LSUIElement`, kein Dock-Symbol, Status-Icon mit dem Eintrag „Panel öffnen“. Usage-Strings für Kamera, Kalender und Apple Events stehen in `Notchling/Info.plist`.
 
 ## Berechtigungen
 
@@ -84,7 +84,7 @@ Deployment-Target ist macOS 26, Architektur arm64. Der GitHub-Actions-Workflow [
 - Der Spiegel ist eine lokale Vorschau, kein Effekt-Spiegel. Die Kamera-LED leuchtet. Es wird nichts gespeichert oder gesendet. Beim Zuklappen stoppt die Aufnahme.
 - `SMAppService` kann eine zusätzliche Bestätigung unter „Anmeldeobjekte & Erweiterungen“ verlangen.
 - Kein Sandbox, kein Auto-Update, kein Mac-App-Store-Build.
-- Die Notch-Maße kommen aus `NSScreen.auxiliaryTopLeftArea` / `auxiliaryTopRightArea`. Sitzt das Panel daneben, kopiert der Menüpunkt „Bildschirmgeometrie kopieren“ die gemessenen Rechtecke.
+- Die Notch-Maße kommen aus `safeAreaInsets` und `auxiliaryTopLeftArea` / `auxiliaryTopRightArea`. Die geschlossene Pille hängt zusätzlich etwa 22 Punkte unter die Menüleiste, weil die Notch selbst keine Pixel hat. Sitzt das Panel daneben, kopiert der Menüpunkt „Bildschirmgeometrie kopieren“ die gemessenen Rechtecke. Diagnose: `log stream --predicate 'subsystem == "com.notchling.app"' --level notice`.
 
 ## Projektlayout
 

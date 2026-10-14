@@ -11,9 +11,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     override init() {
         super.init()
         AppDelegate.shared = self
+        AppLog.lifecycle.notice("Notchling launched")
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        AppLog.lifecycle.notice("applicationDidFinishLaunching")
         NSApp.setActivationPolicy(.accessory)
         let notch = NotchPanelController(model: model)
         self.notch = notch
@@ -29,6 +31,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         model.shelf.load()
         model.hud.start()
         model.mirror.start()
+        AppLog.lifecycle.notice("services started")
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
